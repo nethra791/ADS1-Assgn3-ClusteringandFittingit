@@ -8,7 +8,6 @@ from sklearn import cluster
 import matplotlib.cm as cm
 from scipy.optimize import curve_fit
 
-#Function to read csv files
 def read_csv_with_pandas(FileName):
     """
     Reads data from a CSV file using pandas.
@@ -24,10 +23,9 @@ def read_csv_with_pandas(FileName):
         df = pd.read_csv(FileName)
         return df
     except FileNotFoundError:
-        print(f"Error: The file '{FileName }' was not found.")
+        print(f"Error: The file '{FileName}' was not found.")
         return None
 
-# Function to calculate silhoutte score
 def one_silhoutte(ab, n):
     """
     Calculate the silhouette score for k-means clustering.
@@ -45,8 +43,6 @@ def one_silhoutte(ab, n):
     score = skmet.silhouette_score(ab, labels)
     return score
 
-
-# Logistic growth model function
 def logistic_growth(x, K, r, t0):
     """
     Logistic growth model function.
@@ -62,8 +58,6 @@ def logistic_growth(x, K, r, t0):
     """
     return K / (1 + np.exp(-r * (x - t0)))
 
-
-# Function to calculate numerical derivatives
 def deriv(x, func, parameter, ip):
     """
     Calculate the numerical derivative of a function at a given point.
@@ -85,11 +79,10 @@ def deriv(x, func, parameter, ip):
     delta[ip] = val
     x_float = np.array(x, dtype=np.float64)
     parameter_float = np.array(parameter, dtype=np.float64)
-    diff = 0.5 * (func(x_float, *(parameter_float + delta)) - func(x_float, *(parameter_float - delta)))
+    diff = 0.5 * (func(x_float, *(parameter_float + delta)) - 
+                  func(x_float, *(parameter_float - delta)))
     return diff / val
 
-
-# error propagation function
 def error_prop(x, func, parameter, covar):
     """
     Calculate the propagated error for a function 
@@ -114,138 +107,144 @@ def error_prop(x, func, parameter, covar):
             var += deriv1 * deriv2 * covar[i, j]
     return np.sqrt(var)
 
-#Code for Clustering of data
+# Clustering of data
 data_Tub = read_csv_with_pandas("TubeData.csv")
 print(data_Tub.describe())
-# use 2000 and 2020 for clustering. Countries with one NaN are removed
+
+# Filtering and preprocessing data
 data_Tub = data_Tub[(data_Tub["2000"].notna()) & (data_Tub["2022"].notna())]
 data_Tub = data_Tub.reset_index(drop=True)
-# extract 2000 data
+
+# Extracting relevant columns for growth analysis
 growth = data_Tub[["Country Name", "2000"]].copy()
-# calculate the growth over 22 years
-growth["Growth"] = 100.0/22.0 * (data_Tub["2022"]-data_Tub["2000"]) / data_Tub["2000"]
+growth["Growth"] = 100.0 / 22.0 * (data_Tub["2022"] - 
+                                   data_Tub["2000"]) / data_Tub["2000"]
 warnings.filterwarnings("ignore", category=UserWarning)
 print(growth.describe())
 print()
 print(growth.dtypes)
 
+# Visualizing the data
 plt.figure(figsize=(8, 8))
 plt.scatter(growth["2000"], growth["Growth"])
 plt.xlabel("Incidence of tuberculosis (per 100,000 people),2000")
 plt.ylabel("decline/incline per year [%]")
 plt.show()
 
-# create a scaler object
+# Scaling the data using RobustScaler
 scaler = pp.RobustScaler()
-# set up the scaler
-# extract the columns for clustering
 df_ex = growth[["2000", "Growth"]]
 scaler.fit(df_ex)
-# apply the scaling
 norm = scaler.transform(df_ex)
+
+# Visualizing the scaled data
 plt.figure(figsize=(8, 8))
 plt.scatter(norm[:, 0], norm[:, 1])
 plt.xlabel("Incidence of tuberculosis (per 100,000 people),2000")
 plt.ylabel("decline/incline per year [%]")
 plt.show()
 
-#calculate silhouette score for 2 to 10 clusters
+# Determining the optimal number of clusters using silhouette score
 for ic in range(2, 11):
     score = one_silhoutte(norm, ic)
-    print(f"The silhouette score for {ic: 3d} is {score: 7.4f}")
+    print(f"The silhouette score for {ic:3d} is {score:7.4f}")
 
-# set up the clusterer with the number of expected clusters
+# Performing k-means clustering
 kmeans = cluster.KMeans(n_clusters=3, n_init=20)
-# Fit the data, results are stored in the kmeans object
-kmeans.fit(norm) # fit done on x,y pairs
-# extract cluster labels
+kmeans.fit(norm)
 labels = kmeans.labels_
-# extract the estimated cluster centres and convert to original scales
 cen = kmeans.cluster_centers_
 cen = scaler.inverse_transform(cen)
 xkmeans = cen[:, 0]
 ykmeans = cen[:, 1]
+
+# Visualizing the clustered data
 plt.figure(figsize=(8.0, 8.0))
-# plot data with kmeans cluster number
-plt.scatter(growth["2000"], growth["Growth"], 10, labels, marker="o", cmap=cm.rainbow)
-# show cluster centres
-plt.scatter(xkmeans, ykmeans, 45, "k", marker="d")
+scatter = plt.scatter(growth["2000"], growth["Growth"], 10, labels, 
+                      marker="o", cmap='rainbow', label='Data Points')
+plt.scatter(xkmeans, ykmeans, 45, "k", marker="d", label='Cluster Centers')
 plt.xlabel("Incidence of tuberculosis (per 100,000 people),2000")
 plt.ylabel("decline/incline per year [%]")
+plt.legend(handles=scatter.legend_elements()[0],title="Clusters")
+
+
+plt.legend()
 plt.show()
 print(cen)
 
-#getting subset of the normalized data
-growth2 = growth[labels==0].copy()
+# Analyzing data for a specific cluster
+growth2 = growth[labels == 0].copy()
 print(growth2.describe())
 df_ex = growth2[["2000", "Growth"]]
 scaler.fit(df_ex)
-
-# apply the scaling
 norm = scaler.transform(df_ex)
+
+# Visualizing data for the specific cluster
 plt.figure(figsize=(8, 8))
 plt.scatter(norm[:, 0], norm[:, 1])
 plt.xlabel("Incidence of tuberculosis (per 100,000 people),2000")
 plt.ylabel("decline/incline per year [%]")
 plt.show()
 
-# set up the clusterer with the number of expected clusters
+# Performing k-means clustering on the specific cluster
 kmeans = cluster.KMeans(n_clusters=3, n_init=20)
-# Fit the data, results are stored in the kmeans object
-kmeans.fit(norm) # fit done on x,y pairs
-# extract cluster labels
+kmeans.fit(norm)
 labels = kmeans.labels_
-# extract the estimated cluster centres and convert to original scales
 cen = kmeans.cluster_centers_
 cen = scaler.inverse_transform(cen)
 xkmeans = cen[:, 0]
 ykmeans = cen[:, 1]
+
+# Visualizing clustered data for the specific cluster
 plt.figure(figsize=(8.0, 8.0))
-# plot data with kmeans cluster number
-plt.scatter(growth2["2000"], growth2["Growth"], 10, labels, marker="o", cmap=cm.rainbow)
-# show cluster centres
-plt.scatter(xkmeans, ykmeans, 45, "k", marker="d")
+plt.scatter(growth2["2000"], growth2["Growth"], 10, 
+            labels, marker="o", cmap=cm.rainbow,label='Data Points')
+plt.scatter(xkmeans, ykmeans, 45, "k", marker="d", label='Cluster Centers')
 plt.xlabel("Incidence of tuberculosis (per 100,000 people),2000")
 plt.ylabel("decline/incline per year [%]")
+plt.legend()
 plt.show()
 
 
-
-#code for fitting the data
-# Load data
+# Reading and analyzing data from another CSV file
 filename = 'NamData.csv'  
 data = read_csv_with_pandas(filename)
-
-# Transpose the data for easier processing
-data_transposed = data.transpose()
+data_T = data.transpose()
+data_T.columns = data_T.iloc[0]
+data_T = data_T.drop(data_T.index[0])
 
 # Clean the transposed data
-data_transposed.columns = data_transposed.iloc[0]
-data_transposed = data_transposed.drop(data_transposed.index[0])
+data_T = data_T.dropna()
+data_T = data_T.astype(float)
 
-# Extracting years and values from the transposed data
-years = np.array(data_transposed.index, dtype=np.float64)
-values = data_transposed.iloc[:, 0].values.astype(np.float64)
+# Extracting years and values from transposed data
+years = np.array(data_T.index, dtype=np.float64)
+values = data_T.iloc[:, 0].values.astype(np.float64)
 
-# Fit the logistic growth model
-initial_guess = [max(values), 0.01, np.mean(years)]
-lpar, logistic_covariance = curve_fit(logistic_growth, years, values, p0=initial_guess, maxfev=10000)
+# Fitting logistic growth model to the data
+init_guess = [max(values), 0.01, np.mean(years)]
+lpar, lcov = curve_fit(logistic_growth, years, values,
+                       p0=init_guess, maxfev=10000)
 
-# Make predictions for future years
-future_years = np.arange(2023, 2034, dtype=np.float64)
-future_predictions = logistic_growth(future_years, *lpar)
+# Generating future predictions using the fitted model
+Years_F = np.arange(2023, 2034, dtype=np.float64)
+Predict_F = logistic_growth(Years_F, *lpar)
+conf_int = error_prop(years, logistic_growth, lpar, lcov)
+conf_int_F = error_prop(Years_F, logistic_growth, lpar, lcov)
 
-# Calculate confidence intervals
-confidence_intervals_historical = error_prop(years, logistic_growth, lpar, logistic_covariance)
-confidence_intervals = error_prop(future_years, logistic_growth, lpar, logistic_covariance)
-
-# Plotting
+# Visualizing the logistic growth model fit and future predictions
 plt.figure(figsize=(12, 8))
 plt.plot(years, values, 'g-', label='Original Data')
-plt.plot(years, logistic_growth(years, *lpar), 'r-', label='Logistic Growth Fit (Historical)')
-plt.plot(future_years, future_predictions, 'r--', label='Logistic Growth Fit (Future)')
-plt.fill_between(years, logistic_growth(years, *lpar) - confidence_intervals_historical, logistic_growth(years, *lpar) + confidence_intervals_historical, color='red', alpha=0.2, label='Confidence Interval (Historical)')
-plt.fill_between(future_years, future_predictions - confidence_intervals, future_predictions + confidence_intervals, color='gray', alpha=0.2, label='Confidence Interval')
+plt.plot(years, logistic_growth(years, *lpar), 'r-', 
+         label='Logistic Growth Fit (Historical)')
+plt.plot(Years_F, Predict_F, 'r--', label='Logistic Growth Fit (Future)')
+plt.fill_between(years, logistic_growth(years, *lpar) - conf_int, 
+                 logistic_growth(years, *lpar) + conf_int, 
+                 color='red', alpha=0.2,
+                 label='Confidence Interval (Historical)')
+plt.fill_between(Years_F, Predict_F - conf_int_F, 
+                 Predict_F + conf_int_F, 
+                 color='gray', alpha=0.2, label='Confidence Interval')
 plt.xlabel('Year')
 plt.ylabel("Incidence of tuberculosis (per 100,000 people)")
 plt.title('Logistic Growth Model Fit and Future Prediction')
